@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Live Radio Stream — Continuous Broadcast</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      background: radial-gradient(circle at 50% 20%, #171c28 0%, #0c0e14 100%);
+      color: #e2e8f0;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      overflow-x: hidden;
+    }
+
+    /* Ambient glow */
+    .glow {
+      position: absolute;
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 0;
+      filter: blur(60px);
+    }
+
+    .card {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 480px;
+      background: rgba(23, 27, 40, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 28px;
+      padding: 36px 32px;
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
+      text-align: center;
+    }
+
+    /* Header badges */
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 28px;
+    }
+
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(239, 68, 68, 0.14);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #fca5a5;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .pulse-dot {
+      width: 9px;
+      height: 9px;
+      background-color: #ef4444;
+      border-radius: 50%;
+      box-shadow: 0 0 12px #ef4444;
+      animation: pulse 1.8s infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+      70% { transform: scale(1.15); box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+
+    .listeners-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.82rem;
+      color: #94a3b8;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 6px 12px;
+      border-radius: 9999px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Vinyl artwork animation */
+    .visualizer-box {
+      width: 180px;
+      height: 180px;
+      margin: 0 auto 28px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .vinyl {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: radial-gradient(circle at center, #1e1b4b 0%, #0f172a 50%, #030712 100%);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), inset 0 0 0 2px rgba(255, 255, 255, 0.08);
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.5s ease;
+    }
+
+    .vinyl.spinning {
+      animation: rotateVinyl 8s linear infinite;
+    }
+
+    @keyframes rotateVinyl {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .vinyl-grooves {
+      position: absolute;
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      border: 1px dashed rgba(255, 255, 255, 0.12);
+    }
+
+    .vinyl-center {
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+      box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+    }
+
+    /* Audio wave bars */
+    .wave-bars {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      height: 32px;
+      margin-bottom: 20px;
+    }
+
+    .bar {
+      width: 4px;
+      height: 6px;
+      background: #6366f1;
+      border-radius: 4px;
+      transition: height 0.15s ease;
+    }
+
+    .playing .bar {
+      animation: wave 1.2s ease-in-out infinite alternate;
+    }
+
+    .playing .bar:nth-child(1) { animation-delay: 0.1s; }
+    .playing .bar:nth-child(2) { animation-delay: 0.3s; }
+    .playing .bar:nth-child(3) { animation-delay: 0.5s; }
+    .playing .bar:nth-child(4) { animation-delay: 0.2s; }
+    .playing .bar:nth-child(5) { animation-delay: 0.4s; }
+    .playing .bar:nth-child(6) { animation-delay: 0.6s; }
+    .playing .bar:nth-child(7) { animation-delay: 0.15s; }
+
+    @keyframes wave {
+      0% { height: 6px; background: #6366f1; }
+      50% { height: 28px; background: #a855f7; }
+      100% { height: 12px; background: #ec4899; }
+    }
+
+    /* Track metadata */
+    .track-title {
+      font-size: 1.45rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 6px;
+      letter-spacing: -0.02em;
+    }
+
+    .track-subtitle {
+      font-size: 0.88rem;
+      color: #94a3b8;
+      margin-bottom: 24px;
+    }
+
+    /* Progress & Time */
+    .progress-container {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 9999px;
+      height: 6px;
+      overflow: hidden;
+      margin-bottom: 10px;
+      position: relative;
+    }
+
+    .progress-bar {
+      background: linear-gradient(90deg, #6366f1, #ec4899);
+      height: 100%;
+      width: 0%;
+      border-radius: 9999px;
+      transition: width 0.3s linear;
+    }
+
+    .time-info {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      color: #64748b;
+      font-family: 'JetBrains Mono', monospace;
+      margin-bottom: 28px;
+    }
+
+    /* Big Tune-In Button */
+    .play-btn {
+      width: 100%;
+      padding: 16px 24px;
+      background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+      border: none;
+      border-radius: 18px;
+      color: white;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 1.05rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.4);
+      transition: all 0.2s ease;
+      outline: none;
+    }
+
+    .play-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 14px 30px -4px rgba(79, 70, 229, 0.55);
+    }
+
+    .play-btn:active {
+      transform: translateY(0);
+    }
+
+    .play-btn.playing {
+      background: linear-gradient(135deg, #e11d48 0%, #be123c 100%);
+      box-shadow: 0 10px 25px -5px rgba(225, 29, 72, 0.4);
+    }
+
+    /* Stream URL Box */
+    .stream-url-section {
+      margin-top: 28px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      text-align: left;
+    }
+
+    .stream-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #94a3b8;
+      font-weight: 600;
+      margin-bottom: 8px;
+      display: block;
+    }
+
+    .stream-input-wrap {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 6px 6px 6px 12px;
+    }
+
+    .stream-input {
+      background: transparent;
+      border: none;
+      color: #cbd5e1;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      flex: 1;
+      outline: none;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .copy-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: none;
+      color: #f1f5f9;
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .copy-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .footnote {
+      margin-top: 16px;
+      font-size: 0.72rem;
+      color: #64748b;
+      line-height: 1.4;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="glow"></div>
+
+  <div class="card">
+    <!-- Header -->
+    <div class="header-bar">
+      <div class="live-badge">
+        <span class="pulse-dot"></span>
+        LIVE ON AIR
+      </div>
+      <div class="listeners-badge">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+          <circle cx="9" cy="7" r="4"></circle>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+        </svg>
+        <span id="listenerCount">0 listeners</span>
+      </div>
+    </div>
+
+    <!-- Vinyl Artwork -->
+    <div class="visualizer-box">
+      <div class="vinyl" id="vinyl">
+        <div class="vinyl-grooves"></div>
+        <div class="vinyl-center">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- Audio Bars -->
+    <div class="wave-bars" id="waveBars">
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+    </div>
+
+    <!-- Song Info -->
+    <h1 class="track-title" id="trackName">Continuous Stream</h1>
+    <p class="track-subtitle" id="loopInfo">Looping continuously • Synchronized for all users</p>
+
+    <!-- Synchronized Broadcast Progress -->
+    <div class="progress-container">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+    <div class="time-info">
+      <span id="currentTime">00:00</span>
+      <span id="totalDuration">--:--</span>
+    </div>
+
+    <!-- Big Tune In / Mute Button -->
+    <button class="play-btn" id="tuneBtn">
+      <svg id="playIcon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M8 5v14l11-7z"/>
+      </svg>
+      <span id="btnText">TUNE IN LIVE</span>
+    </button>
+
+    <!-- Raw Stream URL (For VLC, external apps, direct sharing) -->
+    <div class="stream-url-section">
+      <label class="stream-label">Direct Stream URL (VLC / Browser / Apps)</label>
+      <div class="stream-input-wrap">
+        <input type="text" class="stream-input" id="streamUrlInput" readonly />
+        <button class="copy-btn" id="copyBtn">Copy</button>
+      </div>
+    </div>
+
+    <p class="footnote">
+      🎧 Server-side live broadcast: All listeners hear the exact same audio at the exact same moment.
+    </p>
+  </div>
+
+  <audio id="audioPlayer" preload="none"></audio>
+
+  <script>
+    const streamUrl = window.location.origin + '/stream';
+    const streamInput = document.getElementById('streamUrlInput');
+    streamInput.value = streamUrl;
+
+    const audio = document.getElementById('audioPlayer');
+    const tuneBtn = document.getElementById('tuneBtn');
+    const btnText = document.getElementById('btnText');
+    const playIcon = document.getElementById('playIcon');
+    const vinyl = document.getElementById('vinyl');
+    const waveBars = document.getElementById('waveBars');
+    const listenerCount = document.getElementById('listenerCount');
+    const progressBar = document.getElementById('progressBar');
+    const currentTimeEl = document.getElementById('currentTime');
+    const totalDurationEl = document.getElementById('totalDuration');
+    const trackName = document.getElementById('trackName');
+    const loopInfo = document.getElementById('loopInfo');
+    const copyBtn = document.getElementById('copyBtn');
+
+    let isPlaying = false;
+
+    function formatTime(seconds) {
+      if (!seconds || isNaN(seconds)) return '00:00';
+      const m = Math.floor(seconds / 60);
+      const s = Math.floor(seconds % 60);
+      return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+    }
+
+    tuneBtn.addEventListener('click', () => {
+      if (!isPlaying) {
+        // Append timestamp cache-buster so browser opens fresh live feed
+        audio.src = streamUrl + '?t=' + Date.now();
+        audio.play().then(() => {
+          isPlaying = true;
+          updatePlaybackUI(true);
+        }).catch(err => {
+          console.error('Audio play error:', err);
+        });
+      } else {
+        audio.pause();
+        audio.src = '';
+        isPlaying = false;
+        updatePlaybackUI(false);
+      }
+    });
+
+    function updatePlaybackUI(playing) {
+      if (playing) {
+        tuneBtn.classList.add('playing');
+        btnText.textContent = 'DISCONNECT / STOP';
+        playIcon.innerHTML = '<rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect>';
+        vinyl.classList.add('spinning');
+        waveBars.classList.add('playing');
+      } else {
+        tuneBtn.classList.remove('playing');
+        btnText.textContent = 'TUNE IN LIVE';
+        playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+        vinyl.classList.remove('spinning');
+        waveBars.classList.remove('playing');
+      }
+    }
+
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(streamUrl).then(() => {
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => copyBtn.textContent = 'Copy', 2000);
+      });
+    });
+
+    // Poll live status from server
+    async function updateStatus() {
+      try {
+        const res = await fetch('/api/status');
+        if (!res.ok) return;
+        const data = await res.json();
+
+        listenerCount.textContent = `${data.listeners} listener${data.listeners === 1 ? '' : 's'}`;
+        trackName.textContent = data.trackName || 'Continuous Stream';
+        loopInfo.textContent = `Loop #${data.loopCount + 1} • Server-Synced Broadcast`;
+
+        const pct = (data.currentPosition / data.duration) * 100;
+        progressBar.style.width = `${Math.min(pct, 100)}%`;
+        currentTimeEl.textContent = formatTime(data.currentPosition);
+        totalDurationEl.textContent = formatTime(data.duration);
+      } catch (err) {
+        // Server might be temporarily restarting
+      }
+    }
+
+    setInterval(updateStatus, 800);
+    updateStatus();
+  </script>
+</body>
+</html>

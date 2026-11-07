@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: live-radio-stream
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: ""
+    startCommand: python server.py
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
