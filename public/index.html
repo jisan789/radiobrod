@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Live Radio Stream — Continuous Broadcast</title>
+  <title>BBM Radio — 24/7 Live Broadcast Stream</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     * {
       box-sizing: border-box;
@@ -30,15 +30,15 @@
     /* Ambient glow */
     .glow {
       position: absolute;
-      width: 500px;
-      height: 500px;
-      background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
+      width: 520px;
+      height: 520px;
+      background: radial-gradient(circle, rgba(99, 102, 241, 0.18) 0%, rgba(0, 0, 0, 0) 70%);
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
       pointer-events: none;
       z-index: 0;
-      filter: blur(60px);
+      filter: blur(65px);
     }
 
     .card {
@@ -46,13 +46,13 @@
       z-index: 1;
       width: 100%;
       max-width: 480px;
-      background: rgba(23, 27, 40, 0.85);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
+      background: rgba(23, 27, 40, 0.88);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
       border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 28px;
       padding: 36px 32px;
-      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.04);
       text-align: center;
     }
 
@@ -68,8 +68,8 @@
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      background: rgba(239, 68, 68, 0.14);
-      border: 1px solid rgba(239, 68, 68, 0.35);
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
       color: #fca5a5;
       padding: 6px 14px;
       border-radius: 9999px;
@@ -94,6 +94,23 @@
       100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
     }
 
+    .meta-badges {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .bitrate-badge {
+      font-size: 0.75rem;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      padding: 5px 10px;
+      border-radius: 9999px;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+    }
+
     .listeners-badge {
       display: inline-flex;
       align-items: center;
@@ -110,7 +127,7 @@
     .visualizer-box {
       width: 180px;
       height: 180px;
-      margin: 0 auto 28px;
+      margin: 0 auto 26px;
       position: relative;
       display: flex;
       align-items: center;
@@ -144,7 +161,7 @@
       width: 140px;
       height: 140px;
       border-radius: 50%;
-      border: 1px dashed rgba(255, 255, 255, 0.12);
+      border: 1px dashed rgba(255, 255, 255, 0.14);
     }
 
     .vinyl-center {
@@ -152,7 +169,7 @@
       height: 68px;
       border-radius: 50%;
       background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
-      box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+      box-shadow: 0 0 20px rgba(99, 102, 241, 0.45);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -164,7 +181,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 4px;
+      gap: 5px;
       height: 32px;
       margin-bottom: 20px;
     }
@@ -172,9 +189,9 @@
     .bar {
       width: 4px;
       height: 6px;
-      background: #6366f1;
+      background: #475569;
       border-radius: 4px;
-      transition: height 0.15s ease;
+      transition: height 0.15s ease, background 0.2s ease;
     }
 
     .playing .bar {
@@ -197,44 +214,58 @@
 
     /* Track metadata */
     .track-title {
-      font-size: 1.45rem;
-      font-weight: 700;
+      font-size: 1.55rem;
+      font-weight: 800;
       color: #ffffff;
       margin-bottom: 6px;
       letter-spacing: -0.02em;
     }
 
     .track-subtitle {
-      font-size: 0.88rem;
+      font-size: 0.9rem;
       color: #94a3b8;
       margin-bottom: 24px;
     }
 
-    /* Progress & Time */
-    .progress-container {
-      background: rgba(255, 255, 255, 0.08);
-      border-radius: 9999px;
-      height: 6px;
-      overflow: hidden;
-      margin-bottom: 10px;
-      position: relative;
-    }
-
-    .progress-bar {
-      background: linear-gradient(90deg, #6366f1, #ec4899);
-      height: 100%;
-      width: 0%;
-      border-radius: 9999px;
-      transition: width 0.3s linear;
-    }
-
-    .time-info {
+    /* Live Session Info Box */
+    .live-status-box {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 16px;
+      padding: 12px 18px;
       display: flex;
       justify-content: space-between;
-      font-size: 0.78rem;
-      color: #64748b;
+      align-items: center;
+      margin-bottom: 26px;
       font-family: 'JetBrains Mono', monospace;
-      margin-bottom: 28px;
+      font-size: 0.82rem;
+    }
+
+    .live-status-item {
+      display: flex;
+      flex-direction: column;
+      text-align: left;
+      gap: 3px;
+    }
+
+    .live-status-item:last-child {
+      text-align: right;
+    }
+
+    .status-label {
+      font-size: 0.68rem;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .status-value {
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+
+    .status-value.live {
+      color: #4ade80;
     }
 
     /* Big Tune-In Button */
@@ -348,14 +379,17 @@
         <span class="pulse-dot"></span>
         LIVE ON AIR
       </div>
-      <div class="listeners-badge">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-          <circle cx="9" cy="7" r="4"></circle>
-          <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-          <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-        </svg>
-        <span id="listenerCount">0 listeners</span>
+      <div class="meta-badges">
+        <span class="bitrate-badge" id="bitrateBadge">256 kbps</span>
+        <div class="listeners-badge">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+          </svg>
+          <span id="listenerCount">0 listeners</span>
+        </div>
       </div>
     </div>
 
@@ -364,7 +398,7 @@
       <div class="vinyl" id="vinyl">
         <div class="vinyl-grooves"></div>
         <div class="vinyl-center">
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
           </svg>
         </div>
@@ -382,20 +416,23 @@
       <div class="bar"></div>
     </div>
 
-    <!-- Song Info -->
-    <h1 class="track-title" id="trackName">Continuous Stream</h1>
-    <p class="track-subtitle" id="loopInfo">Looping continuously • Synchronized for all users</p>
+    <!-- Station Info -->
+    <h1 class="track-title" id="stationTitle">BBM Radio</h1>
+    <p class="track-subtitle" id="streamSubtitle">Continuous 24/7 Live Broadcast Relay</p>
 
-    <!-- Synchronized Broadcast Progress -->
-    <div class="progress-container">
-      <div class="progress-bar" id="progressBar"></div>
-    </div>
-    <div class="time-info">
-      <span id="currentTime">00:00</span>
-      <span id="totalDuration">--:--</span>
+    <!-- Live Status Indicators -->
+    <div class="live-status-box">
+      <div class="live-status-item">
+        <span class="status-label">Stream Status</span>
+        <span class="status-value live" id="streamStatus">Broadcasting</span>
+      </div>
+      <div class="live-status-item">
+        <span class="status-label">Listening Time</span>
+        <span class="status-value" id="listeningTime">00:00</span>
+      </div>
     </div>
 
-    <!-- Big Tune In / Mute Button -->
+    <!-- Big Tune In / Disconnect Button -->
     <button class="play-btn" id="tuneBtn">
       <svg id="playIcon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
         <path d="M8 5v14l11-7z"/>
@@ -405,7 +442,7 @@
 
     <!-- Raw Stream URL (For VLC, external apps, direct sharing) -->
     <div class="stream-url-section">
-      <label class="stream-label">Direct Stream URL (VLC / Browser / Apps)</label>
+      <label class="stream-label">Direct Stream URL (VLC / Browser / External Apps)</label>
       <div class="stream-input-wrap">
         <input type="text" class="stream-input" id="streamUrlInput" readonly />
         <button class="copy-btn" id="copyBtn">Copy</button>
@@ -413,7 +450,7 @@
     </div>
 
     <p class="footnote">
-      🎧 Server-side live broadcast: All listeners hear the exact same audio at the exact same moment.
+      🎧 24/7 Live Stream: Multi-client relay broadcasting directly to all connected listeners.
     </p>
   </div>
 
@@ -431,29 +468,37 @@
     const vinyl = document.getElementById('vinyl');
     const waveBars = document.getElementById('waveBars');
     const listenerCount = document.getElementById('listenerCount');
-    const progressBar = document.getElementById('progressBar');
-    const currentTimeEl = document.getElementById('currentTime');
-    const totalDurationEl = document.getElementById('totalDuration');
-    const trackName = document.getElementById('trackName');
-    const loopInfo = document.getElementById('loopInfo');
+    const bitrateBadge = document.getElementById('bitrateBadge');
+    const stationTitle = document.getElementById('stationTitle');
+    const streamSubtitle = document.getElementById('streamSubtitle');
+    const streamStatus = document.getElementById('streamStatus');
+    const listeningTimeEl = document.getElementById('listeningTime');
     const copyBtn = document.getElementById('copyBtn');
 
     let isPlaying = false;
+    let listenSeconds = 0;
+    let timerInterval = null;
 
-    function formatTime(seconds) {
-      if (!seconds || isNaN(seconds)) return '00:00';
-      const m = Math.floor(seconds / 60);
-      const s = Math.floor(seconds % 60);
+    function formatTime(sec) {
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
       return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
     }
 
     tuneBtn.addEventListener('click', () => {
       if (!isPlaying) {
-        // Append timestamp cache-buster so browser opens fresh live feed
+        // Append cache-buster so browser connects directly to real-time live feed
         audio.src = streamUrl + '?t=' + Date.now();
         audio.play().then(() => {
           isPlaying = true;
           updatePlaybackUI(true);
+          listenSeconds = 0;
+          listeningTimeEl.textContent = '00:00';
+          clearInterval(timerInterval);
+          timerInterval = setInterval(() => {
+            listenSeconds++;
+            listeningTimeEl.textContent = formatTime(listenSeconds);
+          }, 1000);
         }).catch(err => {
           console.error('Audio play error:', err);
         });
@@ -461,6 +506,7 @@
         audio.pause();
         audio.src = '';
         isPlaying = false;
+        clearInterval(timerInterval);
         updatePlaybackUI(false);
       }
     });
@@ -488,7 +534,7 @@
       });
     });
 
-    // Poll live status from server
+    // Poll live server status
     async function updateStatus() {
       try {
         const res = await fetch('/api/status');
@@ -496,19 +542,24 @@
         const data = await res.json();
 
         listenerCount.textContent = `${data.listeners} listener${data.listeners === 1 ? '' : 's'}`;
-        trackName.textContent = data.trackName || 'Continuous Stream';
-        loopInfo.textContent = `Loop #${data.loopCount + 1} • Server-Synced Broadcast`;
+        bitrateBadge.textContent = `${data.bitrate || 256} kbps`;
+        stationTitle.textContent = data.stationName || 'BBM Radio';
+        
+        if (data.sourceConnected) {
+          streamStatus.textContent = 'Broadcasting';
+          streamStatus.className = 'status-value live';
+        } else {
+          streamStatus.textContent = 'Reconnecting...';
+          streamStatus.className = 'status-value';
+        }
 
-        const pct = (data.currentPosition / data.duration) * 100;
-        progressBar.style.width = `${Math.min(pct, 100)}%`;
-        currentTimeEl.textContent = formatTime(data.currentPosition);
-        totalDurationEl.textContent = formatTime(data.duration);
+        streamSubtitle.textContent = `24/7 Live Relay • ${data.bitrate || 256} kbps HQ Stream`;
       } catch (err) {
         // Server might be temporarily restarting
       }
     }
 
-    setInterval(updateStatus, 800);
+    setInterval(updateStatus, 1000);
     updateStatus();
   </script>
 </body>
