@@ -10,14 +10,25 @@ A continuous live audio streaming relay server built with **pure Python** (zero 
    - Connects to `https://gains.reviveradio.net/proxy/bbmradio/stream` and broadcasts audio simultaneously to all connected listeners.
    - Built-in instant priming buffer (~64 KB, ~2s) for instant playback when listeners connect.
    - Automatic reconnect with retry logic if upstream connection drops.
-2. **Built-in Keep-Warm Self-Pinger:**
+2. **🎙️ Admin DJ Studio Workstation & Manual Speak (Passcode: 8099):**
+   - **Passcode Protected:** Click "DJ Studio (Admin)" in the top header and enter passcode `8099` to unlock the studio broadcast console.
+   - **Manual Speak (On-Air):** Push-to-talk or toggle microphone to go live on air with real-time VU meter.
+   - **Smart Song Auto-Ducking:** Automatically lowers radio music volume when you speak (configurable ducking depth, e.g. 20%) and smooth crossfades back up.
+   - **Multi-Channel Studio Mixer:**
+     - **CH 1:** Host Mic with gain fader, broadcast warmth EQ, FM limiter, and booth reverb.
+     - **CH 2:** Live Song fader (0% - 150%), quick duck, and crossfaders.
+     - **CH 3:** Studio BGM Beds (Late Night Jazz, Lo-Fi, FM Groove, Ambient, or custom MP3 upload).
+     - **CH 4:** Live Studio Sounds & Soundboard (Air Horn, Applause/Cheer, Station Jingle, Turntable Scratch, Rimshot, Booth Room Tone, and Cough Mute).
+   - **Dual Stereo VU Meters & Spectrum Visualizer** for a real broadcast studio booth vibe.
+3. **Built-in Keep-Warm Self-Pinger:**
    - Render's free tier spins down after 15 minutes of inactivity.
    - [`server.py`](file:///c:/Users/Jisan/Desktop/radio/server.py) includes a background thread that automatically self-pings the public endpoint every **10 minutes** via `RENDER_EXTERNAL_URL` (or auto-detected domain), keeping the service awake and playing 24/7 within Render's 750 free monthly hours.
-3. **Zero Configuration Deployment:**
+4. **Zero Configuration Deployment:**
    - Includes [`render.yaml`](file:///c:/Users/Jisan/Desktop/radio/render.yaml) and [`requirements.txt`](file:///c:/Users/Jisan/Desktop/radio/requirements.txt) for 1-click Render web service deployment.
    - Standard `/healthz` endpoint for Render health checks.
-4. **Environment Configuration:**
+5. **Environment Configuration:**
    - Configurable stream URL via the `STREAM_URL` environment variable.
+   - Configurable admin passcode via `ADMIN_PASSCODE` (default: `8099`).
 
 ---
 

@@ -38,6 +38,9 @@ STREAM_URL = os.environ.get(
     "https://gains.reviveradio.net/proxy/bbmradio/stream"
 ).strip()
 
+# Admin Security Passcode (Default 8099 as requested)
+ADMIN_PASSCODE = os.environ.get("ADMIN_PASSCODE", "8099").strip()
+
 # Render automatically provides PORT (usually 10000)
 PORT = int(os.environ.get("PORT", sys.argv[1] if len(sys.argv) > 1 else 3000))
 
@@ -47,6 +50,16 @@ RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL", os.environ.get("SELF
 PING_INTERVAL_SECONDS = int(os.environ.get("PING_INTERVAL", 600))
 
 SERVER_BOOT_TIME = time.time()
+
+# Admin & Live Studio Broadcast State
+admin_lock = threading.Lock()
+admin_state = {
+    "on_air": False,
+    "dj_name": "Host",
+    "announcement": "",
+    "last_active": 0
+}
+active_admin_tokens = set()
 
 
 # ---------------------------------------------------------------------------
@@ -169,6 +182,11 @@ class LiveStreamBroadcaster:
 
         stream_uptime = round(time.time() - self.last_connected_time, 1) if self.is_connected else 0
 
+        with admin_lock:
+            is_on_air = admin_state["on_air"]
+            dj_name = admin_state["dj_name"]
+            announcement = admin_state["announcement"]
+
         return {
             "status": "broadcasting" if self.is_connected else "reconnecting",
             "uptimeSeconds": round(time.time() - SERVER_BOOT_TIME, 1),
@@ -179,7 +197,10 @@ class LiveStreamBroadcaster:
             "genre": self.genre,
             "streamUrl": self.stream_url,
             "sourceConnected": self.is_connected,
-            "totalMegabytes": round(self.total_bytes / (1024 * 1024), 2)
+            "totalMegabytes": round(self.total_bytes / (1024 * 1024), 2),
+            "adminOnAir": is_on_air,
+            "djName": dj_name,
+            "announcement": announcement
         }
 
 
@@ -245,9 +266,100 @@ class RadioHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.send_header("Content-Length", "0")
         self.end_headers()
+
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length) if content_length > 0 else b"{}"
+            payload = json.loads(post_data.decode("utf-8")) if post_data else {}
+        except Exception:
+            payload = {}
+
+        # 1. Verify Admin Passcode (8099)
+        if path == "/api/admin/verify":
+            passcode = str(payload.get("passcode", "")).strip()
+            if passcode == ADMIN_PASSCODE:
+                token = f"adm_{int(time.time())}_{os.urandom(8).hex()}"
+                with admin_lock:
+                    active_admin_tokens.add(token)
+                resp = json.dumps({
+                    "success": True,
+                    "token": token,
+                    "message": "Admin authenticated successfully."
+                }).encode("utf-8")
+                self.send_response(200)
+            else:
+                resp = json.dumps({
+                    "success": False,
+                    "error": "Invalid passcode. Access denied."
+                }).encode("utf-8")
+                self.send_response(401)
+
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+            self.send_header("Content-Length", str(len(resp)))
+            self.end_headers()
+            try:
+                self.wfile.write(resp)
+            except Exception:
+                pass
+            return
+
+        # 2. Update Admin On-Air & Studio Broadcast State
+        if path == "/api/admin/onair":
+            token = payload.get("token") or self.headers.get("Authorization", "").replace("Bearer ", "").strip()
+            passcode = str(payload.get("passcode", "")).strip()
+
+            authorized = False
+            with admin_lock:
+                if (token and token in active_admin_tokens) or (passcode == ADMIN_PASSCODE):
+                    authorized = True
+                    admin_state["on_air"] = bool(payload.get("onAir", False))
+                    if "djName" in payload and payload["djName"]:
+                        admin_state["dj_name"] = str(payload["djName"]).strip()
+                    if "announcement" in payload:
+                        admin_state["announcement"] = str(payload["announcement"]).strip()
+                    admin_state["last_active"] = time.time()
+
+            if authorized:
+                with admin_lock:
+                    current_on_air = admin_state["on_air"]
+                resp = json.dumps({"success": True, "onAir": current_on_air}).encode("utf-8")
+                self.send_response(200)
+            else:
+                resp = json.dumps({"success": False, "error": "Unauthorized"}).encode("utf-8")
+                self.send_response(401)
+
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+            self.send_header("Content-Length", str(len(resp)))
+            self.end_headers()
+            try:
+                self.wfile.write(resp)
+            except Exception:
+                pass
+            return
+
+        # 404 for other POST requests
+        self.send_response(404)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        err_msg = json.dumps({"error": "Endpoint not found"}).encode("utf-8")
+        self.send_header("Content-Length", str(len(err_msg)))
+        self.end_headers()
+        try:
+            self.wfile.write(err_msg)
+        except Exception:
+            pass
 
     def do_GET(self):
         global active_public_url
