@@ -70,10 +70,12 @@ class LiveStreamBroadcaster:
     Connects to the upstream live radio stream, maintains a single continuous
     audio connection, and distributes audio chunks to all connected listener clients.
     Includes an immediate priming ring buffer (~64 KB, ~2s of audio) for instant playback.
+    Also supports real-time admin studio microphone & music mixing injection.
     """
     def __init__(self, stream_url):
         self.stream_url = stream_url
         self.clients = set()
+        self.upstream_clients = set()  # Clean feed for DJ studio mixer
         self.lock = threading.Lock()
         # Keep recent chunks for instantaneous playback priming on new client connections
         self.ring_buffer = collections.deque(maxlen=16)  # 16 x 4096 = 64KB (~2s at 256kbps)
@@ -83,6 +85,7 @@ class LiveStreamBroadcaster:
         self.genre = "Live Radio"
         self.total_bytes = 0
         self.last_connected_time = 0
+        self.last_admin_chunk_time = 0
         self.running = True
 
         # Start background stream consumer thread
@@ -109,7 +112,6 @@ class LiveStreamBroadcaster:
                     icy_genre = resp.headers.get("icy-genre")
 
                     if icy_name:
-                        # e.g. "rOne radio" or "bbmradio"
                         if "bbm" in icy_name.lower():
                             self.station_name = icy_name
                         else:
@@ -136,6 +138,25 @@ class LiveStreamBroadcaster:
                             print("[Radio Relay] Upstream stream disconnected (EOF). Reconnecting...")
                             break
 
+                        # 1. Distribute to clean upstream clients (admin studio mixer input)
+                        with self.lock:
+                            clean_clients = list(self.upstream_clients)
+                        for q in clean_clients:
+                            try:
+                                q.put_nowait(chunk)
+                            except queue.Full:
+                                try:
+                                    _ = q.get_nowait()
+                                    q.put_nowait(chunk)
+                                except Exception:
+                                    pass
+
+                        # 2. If Admin is currently live on air (received studio mix in last 1.8s),
+                        # skip sending raw upstream to /stream clients to prevent audio collision!
+                        is_admin_active = (time.time() - self.last_admin_chunk_time) < 1.8
+                        if is_admin_active:
+                            continue
+
                         self.total_bytes += len(chunk)
 
                         with self.lock:
@@ -147,7 +168,6 @@ class LiveStreamBroadcaster:
                             try:
                                 q.put_nowait(chunk)
                             except queue.Full:
-                                # Client network lagged behind; drop oldest chunk to stay synced with live audio
                                 try:
                                     _ = q.get_nowait()
                                     q.put_nowait(chunk)
@@ -158,6 +178,27 @@ class LiveStreamBroadcaster:
                 self.is_connected = False
                 print(f"[Radio Relay] Stream connection error: {err}. Reconnecting in 3s...")
                 time.sleep(3)
+
+    def inject_admin_chunk(self, chunk):
+        """Inject mixed audio chunk (Mic + Song + BGM + SFX) from the admin studio into the master stream."""
+        if not chunk:
+            return
+        self.last_admin_chunk_time = time.time()
+        self.total_bytes += len(chunk)
+
+        with self.lock:
+            self.ring_buffer.append(chunk)
+            active_clients = list(self.clients)
+
+        for q in active_clients:
+            try:
+                q.put_nowait(chunk)
+            except queue.Full:
+                try:
+                    _ = q.get_nowait()
+                    q.put_nowait(chunk)
+                except Exception:
+                    pass
 
     def subscribe(self):
         """Register a new listener and return their queue along with priming audio burst."""
@@ -175,6 +216,17 @@ class LiveStreamBroadcaster:
             self.clients.discard(q)
             count = len(self.clients)
         print(f"[Listener Disconnected] Active listeners: {count}")
+
+    def subscribe_upstream(self):
+        """Register an admin clean feed client to receive unmixed upstream audio for the studio mixer."""
+        q = queue.Queue(maxsize=100)
+        with self.lock:
+            self.upstream_clients.add(q)
+        return q
+
+    def unsubscribe_upstream(self, q):
+        with self.lock:
+            self.upstream_clients.discard(q)
 
     def get_status(self):
         with self.lock:
@@ -277,12 +329,41 @@ class RadioHandler(BaseHTTPRequestHandler):
 
         try:
             content_length = int(self.headers.get("Content-Length", 0))
-            post_data = self.rfile.read(content_length) if content_length > 0 else b"{}"
-            payload = json.loads(post_data.decode("utf-8")) if post_data else {}
+            raw_body = self.rfile.read(content_length) if content_length > 0 else b""
+        except Exception:
+            raw_body = b""
+
+        # 1. Stream Mixed Audio Chunk from Admin Studio (Mic + Song + BGM + SFX)
+        if path == "/api/broadcast/chunk":
+            if raw_body:
+                broadcaster.inject_admin_chunk(raw_body)
+                with admin_lock:
+                    admin_state["on_air"] = True
+                    admin_state["last_active"] = time.time()
+                resp = json.dumps({"success": True, "bytes": len(raw_body)}).encode("utf-8")
+                self.send_response(200)
+            else:
+                resp = json.dumps({"success": False, "error": "Empty chunk"}).encode("utf-8")
+                self.send_response(400)
+
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+            self.send_header("Content-Length", str(len(resp)))
+            self.end_headers()
+            try:
+                self.wfile.write(resp)
+            except Exception:
+                pass
+            return
+
+        # Parse JSON payload for other API endpoints
+        try:
+            payload = json.loads(raw_body.decode("utf-8")) if raw_body else {}
         except Exception:
             payload = {}
 
-        # 1. Verify Admin Passcode (8099)
+        # 2. Verify Admin Passcode (8099)
         if path == "/api/admin/verify":
             passcode = str(payload.get("passcode", "")).strip()
             if passcode == ADMIN_PASSCODE:
@@ -313,7 +394,7 @@ class RadioHandler(BaseHTTPRequestHandler):
                 pass
             return
 
-        # 2. Update Admin On-Air & Studio Broadcast State
+        # 3. Update Admin On-Air & Studio Broadcast State
         if path == "/api/admin/onair":
             token = payload.get("token") or self.headers.get("Authorization", "").replace("Bearer ", "").strip()
             passcode = str(payload.get("passcode", "")).strip()
@@ -437,6 +518,35 @@ class RadioHandler(BaseHTTPRequestHandler):
                 broadcaster.unsubscribe(q)
             return
 
+        # 2b. Clean Upstream Audio Feed (Pure station audio for studio mixing)
+        if path in ("/upstream_stream", "/clean_stream"):
+            try:
+                self.connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            except Exception:
+                pass
+
+            self.send_response(200)
+            self.send_header("Content-Type", "audio/mpeg")
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.send_header("Connection", "keep-alive")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+
+            q = broadcaster.subscribe_upstream()
+            try:
+                while True:
+                    try:
+                        chunk = q.get(timeout=2.0)
+                        self.wfile.write(chunk)
+                        self.wfile.flush()
+                    except queue.Empty:
+                        continue
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+                pass
+            finally:
+                broadcaster.unsubscribe_upstream(q)
+            return
+
         # 3. Live Status API
         if path == "/api/status":
             status_data = json.dumps(broadcaster.get_status()).encode("utf-8")
@@ -452,21 +562,32 @@ class RadioHandler(BaseHTTPRequestHandler):
                 pass
             return
 
-        # 4. Web Player Interface
-        if path in ("/", "/index.html"):
-            index_path = os.path.join(PUBLIC_DIR, "index.html")
-            if os.path.isfile(index_path):
-                with open(index_path, "rb") as f:
-                    content = f.read()
-                self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.send_header("Content-Length", str(len(content)))
-                self.end_headers()
-                try:
-                    self.wfile.write(content)
-                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
-                    pass
-                return
+        # 4. Web Player & Static Files (index.html, lame.min.js, etc.)
+        req_filename = "index.html" if path in ("/", "/index.html") else path.lstrip("/")
+        safe_file_path = os.path.abspath(os.path.join(PUBLIC_DIR, req_filename))
+        if safe_file_path.startswith(os.path.abspath(PUBLIC_DIR)) and os.path.isfile(safe_file_path):
+            content_type = "text/html; charset=utf-8"
+            if safe_file_path.endswith(".js"):
+                content_type = "application/javascript; charset=utf-8"
+            elif safe_file_path.endswith(".css"):
+                content_type = "text/css; charset=utf-8"
+            elif safe_file_path.endswith(".json"):
+                content_type = "application/json"
+            elif safe_file_path.endswith(".mp3"):
+                content_type = "audio/mpeg"
+
+            with open(safe_file_path, "rb") as f:
+                content = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            try:
+                self.wfile.write(content)
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+                pass
+            return
 
         # 5. 404 Not Found
         self.send_response(404)

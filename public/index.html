@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="/lame.min.js"></script>
   <style>
     * {
       box-sizing: border-box;
@@ -1449,8 +1450,10 @@
     </p>
   </div>
 
-  <!-- Audio Element -->
+  <!-- Audio Elements -->
   <audio id="audioPlayer" preload="none" crossorigin="anonymous"></audio>
+  <!-- Clean studio input stream for Channel 2 mixing -->
+  <audio id="studioCleanAudio" preload="none" crossorigin="anonymous"></audio>
 
   <!-- =======================================================================
        1. PASSCODE SECURITY MODAL (Passcode: 8099)
@@ -1527,7 +1530,7 @@
           </div>
           <div class="studio-title-wrap">
             <h2>BBM Radio — DJ Studio Booth</h2>
-            <p>Live Audio Mixing Console • Manual Speak • Studio Sound FX</p>
+            <p>Live Audio Mixing Console • Manual Speak • Merged to Stream URL</p>
           </div>
         </div>
         <div class="studio-header-actions">
@@ -1591,7 +1594,7 @@
               <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
             </svg>
             <span id="micBtnText">MANUAL SPEAK</span>
-            <span class="mic-status-label" id="micBtnSubText">Click or Hold to Talk</span>
+            <span class="mic-status-label" id="micBtnSubText">Click to Talk (Auto-Ducks Song)</span>
           </button>
 
           <!-- Mic VU Meter -->
@@ -1619,7 +1622,7 @@
             <button class="fx-pill-btn" id="fxReverbBtn" title="Subtle studio acoustic room reverb">
               🏛️ Room
             </button>
-            <button class="fx-pill-btn" id="fxMonitorBtn" title="Hear yourself in headphones">
+            <button class="fx-pill-btn" id="fxMonitorBtn" title="Hear your voice in headphones (muted to room)">
               🎧 Monitor
             </button>
           </div>
@@ -1671,11 +1674,11 @@
 
           <div class="ducking-control-box" style="margin-top: auto;">
             <div class="slider-info">
-              <span class="slider-label" style="font-size: 0.7rem;">Active Output</span>
-              <span class="slider-val" id="activeSongMixVal" style="color: #4ade80;">100% (0 dB)</span>
+              <span class="slider-label" style="font-size: 0.7rem;">Active Output in Mix</span>
+              <span class="slider-val" id="activeSongMixVal" style="color: #4ade80;">100% (Normal)</span>
             </div>
             <p style="font-size: 0.68rem; color: #64748b; margin-top: 4px; line-height: 1.35;">
-              Ducks seamlessly when host speaks for a professional studio radio talkover.
+              Ducks seamlessly into background music when speaking. Mixed live into the broadcast stream URL.
             </p>
           </div>
         </div>
@@ -1722,7 +1725,7 @@
 
           <div class="ducking-control-box" style="margin-top: auto;">
             <p style="font-size: 0.68rem; color: #64748b; line-height: 1.35;">
-              Mix smooth background melodies behind your announcements for radio show atmosphere.
+              Mix smooth background melodies behind your speech for authentic radio show atmosphere.
             </p>
           </div>
         </div>
@@ -1788,13 +1791,13 @@
       <div class="studio-header" style="padding: 14px 20px;">
         <div style="display: flex; align-items: center; gap: 14px; flex: 1;">
           <span style="font-size: 0.78rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #94a3b8;">
-            Master Output:
+            Stream Master:
           </span>
           <input type="range" class="fader-slider" id="masterVolSlider" min="0" max="120" value="100" style="max-width: 220px;" />
           <span class="slider-val" id="masterVolVal" style="font-size: 0.8rem;">100%</span>
         </div>
         <div style="font-size: 0.72rem; color: #64748b; font-family: 'JetBrains Mono', monospace;">
-          Session Passcode: <span style="color: #4ade80; font-weight: 700;">8099 VERIFIED</span>
+          Stream Injection: <span id="streamInjectBadge" style="color: #4ade80; font-weight: 700;">READY</span>
         </div>
       </div>
 
@@ -1804,13 +1807,15 @@
   <!-- Audio Studio Logic -->
   <script>
     // =========================================================================
-    // 1. Core Radio Stream Player Logic
+    // 1. Core Radio Stream Player Logic (Listener Mode)
     // =========================================================================
     const streamUrl = window.location.origin + '/stream';
+    const cleanStreamUrl = window.location.origin + '/upstream_stream';
     const streamInput = document.getElementById('streamUrlInput');
     streamInput.value = streamUrl;
 
     const audio = document.getElementById('audioPlayer');
+    const studioCleanAudio = document.getElementById('studioCleanAudio');
     const tuneBtn = document.getElementById('tuneBtn');
     const btnText = document.getElementById('btnText');
     const playIcon = document.getElementById('playIcon');
@@ -1824,6 +1829,7 @@
     const listeningTimeEl = document.getElementById('listeningTime');
     const copyBtn = document.getElementById('copyBtn');
     const djLiveBanner = document.getElementById('djLiveBanner');
+    const streamInjectBadge = document.getElementById('streamInjectBadge');
 
     let isPlaying = false;
     let listenSeconds = 0;
@@ -1964,7 +1970,7 @@
     adminTriggerBtn.addEventListener('click', () => {
       initAudioEngine();
       if (isAdminUnlocked) {
-        studioOverlay.classList.add('open');
+        openStudioConsole();
       } else {
         openPasscodeModal();
       }
@@ -2063,10 +2069,9 @@
           }
         } catch (e) {}
 
-        // Success transition
         playStudioChime();
         closePasscodeModal();
-        studioOverlay.classList.add('open');
+        openStudioConsole();
       } else {
         // Error shake
         passcodeErrorText.textContent = 'Incorrect passcode. Access denied.';
@@ -2078,14 +2083,32 @@
       }
     }
 
+    function openStudioConsole() {
+      // NOTE: User requested: "And don't stream the audio to the admin panel.
+      // The admin panel should only speak, and the main audio should stream in the stream URL."
+      // So pause the listener player if it was running on the admin's device to prevent echo/feedback!
+      if (isPlaying) {
+        audio.pause();
+        audio.src = '';
+        isPlaying = false;
+        clearInterval(timerInterval);
+        updatePlaybackUI(false);
+      }
+
+      studioOverlay.classList.add('open');
+      initAudioEngine();
+      startCleanSongFeed();
+    }
+
     closeStudioBtn.addEventListener('click', () => {
       studioOverlay.classList.remove('open');
     });
 
     lockStudioBtn.addEventListener('click', async () => {
       if (isMicActive) {
-        toggleMic(false);
+        await toggleMic(false);
       }
+      stopCleanSongFeed();
       isAdminUnlocked = false;
       adminToken = '';
       sessionStorage.removeItem('bbm_admin_unlocked');
@@ -2096,9 +2119,15 @@
     });
 
     // =========================================================================
-    // 3. WEB AUDIO STUDIO MIXING ENGINE & PROCESSOR
+    // 3. MULTI-CHANNEL STUDIO MIXER & MP3 STREAM BROADCASTER ENGINE
     // =========================================================================
     let audioCtx = null;
+    let studioMixerBus = null;
+    let silentGain = null;
+    let processorNode = null;
+    let mp3Encoder = null;
+    let cleanSongSource = null;
+
     let masterGain = null;
     let songGain = null;
     let bgmGain = null;
@@ -2110,17 +2139,21 @@
     let micMonitorGain = null;
     let micAnalyser = null;
     let masterAnalyser = null;
-    let mediaElementSource = null;
     let micStream = null;
     let micSourceNode = null;
+
     let isMicActive = false;
     let isCoughMuted = false;
+    let isBroadcastingToStream = false;
 
     // Parameters
     let songNormalVolume = 1.0;
     let songDuckedVolume = 0.20;
     let isAutoDuckEnabled = true;
-    let currentDuckedSongGain = 1.0;
+
+    // MP3 Chunk buffer
+    let mp3ChunksAccumulator = [];
+    let lastChunkSentTime = 0;
 
     function initAudioEngine() {
       if (audioCtx) {
@@ -2131,57 +2164,58 @@
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       audioCtx = new AudioContextClass();
 
-      // Master output
+      // Initialize lamejs MP3 Encoder (Stereo, AudioContext sampleRate, 128 kbps)
+      if (typeof lamejs !== 'undefined' && lamejs.Mp3Encoder) {
+        mp3Encoder = new lamejs.Mp3Encoder(2, audioCtx.sampleRate, 128);
+        console.log(`[Studio Engine] lamejs MP3 encoder ready: 2-ch @ ${audioCtx.sampleRate}Hz, 128 kbps`);
+      } else {
+        console.warn('[Studio Engine] lamejs encoder library not found');
+      }
+
+      // Master Studio Mixer Bus: ALL 4 CHANNELS FEED INTO THIS BUS
+      studioMixerBus = audioCtx.createGain();
+      studioMixerBus.gain.setValueAtTime(1.0, audioCtx.currentTime);
+
       masterGain = audioCtx.createGain();
       masterGain.gain.setValueAtTime(1.0, audioCtx.currentTime);
+      studioMixerBus.connect(masterGain);
 
       masterAnalyser = audioCtx.createAnalyser();
       masterAnalyser.fftSize = 128;
-
       masterGain.connect(masterAnalyser);
-      masterAnalyser.connect(audioCtx.destination);
 
-      // Song / Main Radio Channel
-      songGain = audioCtx.createGain();
-      songGain.gain.setValueAtTime(songNormalVolume, audioCtx.currentTime);
-      songGain.connect(masterGain);
+      // SCRIPT PROCESSOR FOR REAL-TIME MP3 STREAM ENCODING
+      processorNode = audioCtx.createScriptProcessor(4096, 2, 2);
+      masterGain.connect(processorNode);
 
-      // Connect HTML5 audio element through Web Audio if feasible
-      try {
-        if (!mediaElementSource && audio) {
-          mediaElementSource = audioCtx.createMediaElementSource(audio);
-          mediaElementSource.connect(songGain);
-        }
-      } catch (e) {
-        // Browser CORS or already connected
-      }
+      // CRITICAL DESIGN FEATURE:
+      // In the admin panel, the mixed audio is ROUTED TO SILENCE locally
+      // so it never blasts out of the admin's laptop speakers (no echo, no feedback loop!).
+      // The ScriptProcessor requires connection to destination to keep its clock ticking.
+      silentGain = audioCtx.createGain();
+      silentGain.gain.setValueAtTime(0.0, audioCtx.currentTime);
+      processorNode.connect(silentGain);
+      silentGain.connect(audioCtx.destination);
 
-      // Background Music (BGM) Channel
-      bgmGain = audioCtx.createGain();
-      bgmGain.gain.setValueAtTime(0.45, audioCtx.currentTime);
-      bgmGain.connect(masterGain);
+      // Handle real-time audio samples and encode into MP3
+      processorNode.onaudioprocess = handleAudioProcess;
 
-      // Soundboard (SFX) Channel
-      sfxGain = audioCtx.createGain();
-      sfxGain.gain.setValueAtTime(0.85, audioCtx.currentTime);
-      sfxGain.connect(masterGain);
-
-      // Host Microphone Channel
+      // -----------------------------------------------------------------------
+      // CH 1: Host Microphone Processing Chain
+      // -----------------------------------------------------------------------
       micGain = audioCtx.createGain();
       micGain.gain.setValueAtTime(1.0, audioCtx.currentTime);
 
-      // Studio Warmth EQ
       micWarmthFilter = audioCtx.createBiquadFilter();
       micWarmthFilter.type = 'lowshelf';
       micWarmthFilter.frequency.setValueAtTime(160, audioCtx.currentTime);
-      micWarmthFilter.gain.setValueAtTime(4.5, audioCtx.currentTime); // +4.5dB broadcast warmth
+      micWarmthFilter.gain.setValueAtTime(4.5, audioCtx.currentTime); // +4.5dB broadcast low-end warmth
 
       micHighShelfFilter = audioCtx.createBiquadFilter();
       micHighShelfFilter.type = 'highshelf';
       micHighShelfFilter.frequency.setValueAtTime(4200, audioCtx.currentTime);
-      micHighShelfFilter.gain.setValueAtTime(2.0, audioCtx.currentTime); // Vocal air/presence
+      micHighShelfFilter.gain.setValueAtTime(2.0, audioCtx.currentTime);
 
-      // Broadcast Compressor / Limiter
       micCompressor = audioCtx.createDynamicsCompressor();
       micCompressor.threshold.setValueAtTime(-24, audioCtx.currentTime);
       micCompressor.knee.setValueAtTime(10, audioCtx.currentTime);
@@ -2189,15 +2223,121 @@
       micCompressor.attack.setValueAtTime(0.003, audioCtx.currentTime);
       micCompressor.release.setValueAtTime(0.25, audioCtx.currentTime);
 
-      // Headphone Monitoring Node
       micMonitorGain = audioCtx.createGain();
-      micMonitorGain.gain.setValueAtTime(0.0, audioCtx.currentTime); // Default muted to prevent speaker feedback
+      micMonitorGain.gain.setValueAtTime(0.0, audioCtx.currentTime); // Default silent locally
+      micGain.connect(micMonitorGain);
+      micMonitorGain.connect(audioCtx.destination); // For headphone monitor if toggled
 
       micAnalyser = audioCtx.createAnalyser();
       micAnalyser.fftSize = 64;
 
-      // Start studio visualizer render loop
+      // -----------------------------------------------------------------------
+      // CH 2: Clean Song Feed Channel (from /upstream_stream)
+      // -----------------------------------------------------------------------
+      songGain = audioCtx.createGain();
+      songGain.gain.setValueAtTime(songNormalVolume, audioCtx.currentTime);
+      songGain.connect(studioMixerBus);
+
+      // -----------------------------------------------------------------------
+      // CH 3: Background Music (BGM) Channel
+      // -----------------------------------------------------------------------
+      bgmGain = audioCtx.createGain();
+      bgmGain.gain.setValueAtTime(0.45, audioCtx.currentTime);
+      bgmGain.connect(studioMixerBus);
+
+      // -----------------------------------------------------------------------
+      // CH 4: Live Sounds (SFX / Soundboard) Channel
+      // -----------------------------------------------------------------------
+      sfxGain = audioCtx.createGain();
+      sfxGain.gain.setValueAtTime(0.85, audioCtx.currentTime);
+      sfxGain.connect(studioMixerBus);
+
       startVisualizers();
+    }
+
+    // Connect clean song feed to Channel 2
+    function startCleanSongFeed() {
+      if (!studioCleanAudio) return;
+      if (!cleanSongSource && audioCtx) {
+        try {
+          cleanSongSource = audioCtx.createMediaElementSource(studioCleanAudio);
+          cleanSongSource.connect(songGain);
+        } catch (e) {}
+      }
+      studioCleanAudio.src = cleanStreamUrl + '?t=' + Date.now();
+      studioCleanAudio.play().catch(e => {
+        console.log('Clean feed play note:', e.message);
+      });
+    }
+
+    function stopCleanSongFeed() {
+      if (studioCleanAudio) {
+        studioCleanAudio.pause();
+        studioCleanAudio.src = '';
+      }
+    }
+
+    // Real-Time MP3 Stream Encoder & Uploader
+    function handleAudioProcess(e) {
+      if (!isBroadcastingToStream && !isMicActive) return;
+      if (!mp3Encoder) return;
+
+      const left = e.inputBuffer.getChannelData(0);
+      const right = e.inputBuffer.getChannelData(1);
+      const sampleCount = left.length;
+
+      const leftInt16 = new Int16Array(sampleCount);
+      const rightInt16 = new Int16Array(sampleCount);
+
+      // Convert Float32Array (-1.0 to 1.0) to 16-bit PCM (-32768 to 32767)
+      for (let i = 0; i < sampleCount; i++) {
+        let l = Math.max(-1, Math.min(1, left[i]));
+        let r = Math.max(-1, Math.min(1, right[i]));
+        leftInt16[i] = l < 0 ? l * 0x8000 : l * 0x7FFF;
+        rightInt16[i] = r < 0 ? r * 0x8000 : r * 0x7FFF;
+      }
+
+      // Encode stereo PCM into MP3 frames
+      const mp3Chunk = mp3Encoder.encodeBuffer(leftInt16, rightInt16);
+      if (mp3Chunk.length > 0) {
+        mp3ChunksAccumulator.push(new Uint8Array(mp3Chunk.buffer, mp3Chunk.byteOffset, mp3Chunk.length));
+      }
+
+      // Dispatch accumulated MP3 frames to server every ~300ms (or when accumulated size >= 4KB)
+      const now = performance.now();
+      let totalBytes = 0;
+      for (let i = 0; i < mp3ChunksAccumulator.length; i++) {
+        totalBytes += mp3ChunksAccumulator[i].length;
+      }
+
+      if (totalBytes >= 4096 || (now - lastChunkSentTime >= 300 && totalBytes > 0)) {
+        lastChunkSentTime = now;
+        sendMp3ChunkToServer(mp3ChunksAccumulator);
+        mp3ChunksAccumulator = [];
+      }
+    }
+
+    async function sendMp3ChunkToServer(chunks) {
+      if (!chunks || chunks.length === 0) return;
+      const blob = new Blob(chunks, { type: 'audio/mpeg' });
+
+      try {
+        const res = await fetch('/api/broadcast/chunk', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'audio/mpeg',
+            'Authorization': 'Bearer ' + adminToken
+          },
+          body: blob
+        });
+
+        if (res.ok) {
+          streamInjectBadge.textContent = 'STREAMING LIVE';
+          streamInjectBadge.style.color = '#ef4444';
+        }
+      } catch (err) {
+        // Stream chunk post error
+      }
     }
 
     // =========================================================================
@@ -2242,7 +2382,7 @@
       const targetState = forceState !== null ? forceState : !isMicActive;
 
       if (targetState) {
-        // Activate Mic
+        // Activate Mic & Stream Broadcast
         try {
           if (!micStream) {
             micStream = await navigator.mediaDevices.getUserMedia({
@@ -2256,18 +2396,18 @@
 
           if (!micSourceNode && micStream) {
             micSourceNode = audioCtx.createMediaStreamSource(micStream);
-            // Route: micSourceNode -> micWarmthFilter -> micHighShelfFilter -> micCompressor -> micGain -> micAnalyser -> masterGain
+            // Route: micSourceNode -> micWarmthFilter -> micHighShelfFilter -> micCompressor -> micGain -> studioMixerBus
             micSourceNode.connect(micWarmthFilter);
             micWarmthFilter.connect(micHighShelfFilter);
             micHighShelfFilter.connect(micCompressor);
             micCompressor.connect(micGain);
             micGain.connect(micAnalyser);
-            micGain.connect(masterGain);
-            micGain.connect(micMonitorGain);
-            micMonitorGain.connect(audioCtx.destination);
+            micGain.connect(studioMixerBus);
           }
 
           isMicActive = true;
+          isBroadcastingToStream = true;
+
           updateMicUI(true);
           applyAutoDucking(true);
           await notifyOnAirState(true);
@@ -2280,7 +2420,16 @@
         isMicActive = false;
         updateMicUI(false);
         applyAutoDucking(false);
-        await notifyOnAirState(false);
+
+        // Keep broadcasting for ~1.5 seconds to let smooth tail finish, then notify
+        setTimeout(async () => {
+          if (!isMicActive) {
+            isBroadcastingToStream = false;
+            streamInjectBadge.textContent = 'READY';
+            streamInjectBadge.style.color = '#4ade80';
+            await notifyOnAirState(false);
+          }
+        }, 1500);
       }
     }
 
@@ -2288,7 +2437,7 @@
       if (onAir) {
         micSpeakBtn.classList.add('on-air');
         micBtnText.textContent = 'MIC IS LIVE (ON AIR)';
-        micBtnSubText.textContent = 'Click to Mute / Release';
+        micBtnSubText.textContent = 'Speaking Live (Song Ducked to BGM)';
         micStatusPill.textContent = 'ON AIR';
         micStatusPill.classList.add('active');
         onAirSign.classList.add('active');
@@ -2296,7 +2445,7 @@
       } else {
         micSpeakBtn.classList.remove('on-air');
         micBtnText.textContent = 'MANUAL SPEAK';
-        micBtnSubText.textContent = 'Click or Hold to Talk';
+        micBtnSubText.textContent = 'Click to Talk (Auto-Ducks Song)';
         micStatusPill.textContent = 'Muted';
         micStatusPill.classList.remove('active');
         onAirSign.classList.remove('active');
@@ -2315,22 +2464,15 @@
 
       const now = audioCtx ? audioCtx.currentTime : 0;
       const targetGain = speaking ? songDuckedVolume : songNormalVolume;
-      currentDuckedSongGain = targetGain;
 
-      // Smooth audio ramp (120ms fade down, 400ms fade up)
+      // Smooth audio ramp (120ms fade down, 450ms fade up)
       if (songGain && audioCtx) {
         songGain.gain.cancelScheduledValues(now);
         songGain.gain.setValueAtTime(songGain.gain.value, now);
-        songGain.gain.linearRampToValueAtTime(targetGain, now + (speaking ? 0.12 : 0.4));
+        songGain.gain.linearRampToValueAtTime(targetGain, now + (speaking ? 0.12 : 0.45));
       }
 
-      // Also adjust HTML5 audio element directly for maximum compatibility
-      if (audio && !isSongMuted) {
-        const targetPercent = Math.min(1.0, targetGain);
-        audio.volume = targetPercent;
-      }
-
-      activeSongMixVal.textContent = `${Math.round(targetGain * 100)}% (${speaking ? 'Ducked' : 'Normal'})`;
+      activeSongMixVal.textContent = `${Math.round(targetGain * 100)}% (${speaking ? 'Ducked BGM' : 'Full Song'})`;
       activeSongMixVal.style.color = speaking ? '#f59e0b' : '#4ade80';
     }
 
@@ -2383,7 +2525,7 @@
         if (active && !reverbConvolver) {
           reverbConvolver = createStudioReverbNode();
           micGain.connect(reverbConvolver);
-          reverbConvolver.connect(masterGain);
+          reverbConvolver.connect(studioMixerBus);
         } else if (!active && reverbConvolver) {
           try {
             micGain.disconnect(reverbConvolver);
@@ -2430,10 +2572,7 @@
         if (songGain && audioCtx) {
           songGain.gain.setValueAtTime(songNormalVolume, audioCtx.currentTime);
         }
-        if (audio && !isSongMuted) {
-          audio.volume = Math.min(1.0, songNormalVolume);
-        }
-        activeSongMixVal.textContent = `${val}% (Normal)`;
+        activeSongMixVal.textContent = `${val}% (Full Song)`;
       }
     });
 
@@ -2456,13 +2595,11 @@
         songMuteBtn.style.background = 'rgba(239, 68, 68, 0.3)';
         songMuteBtn.textContent = '🔊 Unmute';
         if (songGain && audioCtx) songGain.gain.setValueAtTime(0, audioCtx.currentTime);
-        if (audio) audio.volume = 0;
       } else {
         songMuteBtn.style.background = '';
         songMuteBtn.textContent = '🔇 Mute Song';
         const target = isMicActive ? songDuckedVolume : songNormalVolume;
         if (songGain && audioCtx) songGain.gain.setValueAtTime(target, audioCtx.currentTime);
-        if (audio) audio.volume = Math.min(1.0, target);
       }
     });
 
@@ -2546,23 +2683,17 @@
       // Procedural Studio Beds using pure Web Audio synthesis (zero external files required)
       const now = audioCtx.currentTime;
 
-      // Choose chord harmonic frequencies for different vibes
       let chordNotes = [];
       if (type === 'jazz') {
-        // Cmaj9 - Am7 - Dm9 - G13 smooth jazz progression
         chordNotes = [261.63, 329.63, 392.00, 493.88]; // C, E, G, B
       } else if (type === 'lofi') {
-        // Fmaj7 - Em7 lofi chill bed
         chordNotes = [174.61, 220.00, 261.63, 329.63]; // F3, A3, C4, E4
       } else if (type === 'groove') {
-        // Energetic broadcast groove
         chordNotes = [130.81, 196.00, 261.63, 392.00]; // C3, G3, C4, G4
       } else {
-        // Deep ambient room
         chordNotes = [110.00, 164.81, 220.00, 329.63]; // A2, E3, A3, E4
       }
 
-      // Create warm analog synth chord bed with subtle vibrato
       chordNotes.forEach((freq, idx) => {
         const osc = audioCtx.createOscillator();
         const chordGain = audioCtx.createGain();
@@ -2571,11 +2702,9 @@
         osc.type = (idx % 2 === 0) ? 'triangle' : 'sine';
         osc.frequency.setValueAtTime(freq, now);
 
-        // Lowpass filter for smooth warmth
         filter.type = 'lowpass';
         filter.frequency.setValueAtTime(800 + idx * 200, now);
 
-        // Slow subtle LFO tremolo
         const lfo = audioCtx.createOscillator();
         const lfoGain = audioCtx.createGain();
         lfo.frequency.setValueAtTime(0.3 + idx * 0.1, now);
@@ -2628,7 +2757,6 @@
       customBgmAudio.loop = true;
       customBgmAudio.volume = parseInt(bgmVolSlider.value, 10) / 100;
 
-      // Add to select options
       let customOpt = document.getElementById('customBgmOption');
       if (!customOpt) {
         customOpt = document.createElement('option');
@@ -2645,7 +2773,7 @@
     });
 
     // =========================================================================
-    // 7. STUDIO LIVE SOUNDS & SOUNDBOARD (PDR SYNTHESIS)
+    // 7. STUDIO LIVE SOUNDS & SOUNDBOARD (CH 4)
     // =========================================================================
     const sfxVolSlider = document.getElementById('sfxVolSlider');
     const sfxVolVal = document.getElementById('sfxVolVal');
@@ -2697,7 +2825,7 @@
     // 1. Classic Radio Air Horn
     function playAirHorn(now) {
       now = now || (audioCtx ? audioCtx.currentTime : 0);
-      const freqs = [233.08, 277.18, 466.16]; // High Bb minor chord
+      const freqs = [233.08, 277.18, 466.16];
       freqs.forEach(freq => {
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
@@ -2751,7 +2879,7 @@
     // 3. Station Signature Jingle Chime
     function playStudioChime(now) {
       now = now || (audioCtx ? audioCtx.currentTime : 0);
-      const notes = [659.25, 830.61, 987.77, 1318.51]; // E5, G#5, B5, E6
+      const notes = [659.25, 830.61, 987.77, 1318.51];
       notes.forEach((f, idx) => {
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
@@ -2805,7 +2933,6 @@
     // 5. Classic Comedy Rimshot (Ba-dum-tss)
     function playRimshot(now) {
       now = now || (audioCtx ? audioCtx.currentTime : 0);
-      // Drum pop
       const osc = audioCtx.createOscillator();
       const oscGain = audioCtx.createGain();
       osc.frequency.setValueAtTime(260, now);
@@ -2817,7 +2944,6 @@
       osc.start(now);
       osc.stop(now + 0.15);
 
-      // Snare snap
       const bufferSize = audioCtx.sampleRate * 0.25;
       const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
       const data = buffer.getChannelData(0);
